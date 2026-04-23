@@ -173,6 +173,47 @@ fn claim_default(
 
 ---
 
+
+## Deployment Script
+This repository includes an automated deployment script that handles the full Soroban contract lifecycle.
+
+### Script Location
+```bash
+scripts/deploy.ts
+```
+### What it does
+The script fully automates:
+- Contract build using existing Makefile
+- WASM artifact detection
+- Deployment to Soroban testnet or mainnet
+- Contract verification using get_invoice(1)
+- Automatic update of:
+  - .env → CONTRACT_ID
+  - README.md → Contract ID field
+- Dry-run mode for safe testing
+- Structured error handling
+
+### Usage
+#### Deploy to Testnet
+```bash
+node scripts/deploy.ts --network=testnet
+```
+
+#### Deploy to Mainnet
+```bash
+node scripts/deploy.ts --network=mainnet
+```
+#### Dry Run (No Deployment)
+```bash
+node scripts/deploy.ts --dry-run
+```
+
+### Environment Setup
+Ensure .env contains:
+```env
+STELLAR_SECRET_KEY=your_secret_key
+```
+
 ## Getting Started
 
 ### Prerequisites
