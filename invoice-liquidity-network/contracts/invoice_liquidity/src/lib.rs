@@ -302,6 +302,16 @@ impl InvoiceLiquidityContract {
         }
         Ok(load_invoice(&env, invoice_id))
     }
+
+    // ----------------------------------------------------------------
+    // get_invoice_count — read-only helper for frontends
+    // ----------------------------------------------------------------
+    pub fn get_invoice_count(env: Env) -> u64 {
+        env.storage()
+            .persistent()
+            .get(&StorageKey::InvoiceCount)
+            .unwrap_or(0)
+    }
 }
 
 // ----------------------------------------------------------------

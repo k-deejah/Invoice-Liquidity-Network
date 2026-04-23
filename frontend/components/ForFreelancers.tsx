@@ -35,7 +35,7 @@ export default function ForFreelancers() {
   ];
 
   return (
-    <section className="bg-surface-container-low py-24 px-8">
+    <section id="for-freelancers" className="bg-surface-container-low py-24 px-8 transition-colors duration-300">
       <div className="max-w-7xl mx-auto grid md:grid-cols-2 gap-20 items-center">
         <div>
           <h2 className="text-4xl font-headline mb-6">

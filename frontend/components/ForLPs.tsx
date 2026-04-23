@@ -1,25 +1,8 @@
 "use client";
 
-import { useToast } from "../context/ToastContext";
+import LPDashboard from "./LPDashboard";
 
 export default function ForLPs() {
-  const { addToast, updateToast } = useToast();
-
-  const handleFund = async () => {
-    const toastId = addToast({ type: "pending", title: "Funding Invoice..." });
-    try {
-      await new Promise(resolve => setTimeout(resolve, 2000));
-      updateToast(toastId, { type: "success", title: "Funded Successfully", txHash: "8b4a2c1de...e31" });
-    } catch (error) {
-      updateToast(toastId, { type: "error", title: "Funding Failed", message: "Transaction reverted." });
-    }
-  };
-  const marketplaceData = [
-    { amount: "$12,400", discount: "2.8%", yield: "14.2% APR" },
-    { amount: "$4,500", discount: "4.0%", yield: "11.8% APR" },
-    { amount: "$2,100", discount: "3.2%", yield: "13.5% APR" },
-  ];
-
   const features = [
     {
       title: "Real World Assets",
@@ -39,78 +22,26 @@ export default function ForLPs() {
   ];
 
   return (
-    <section className="bg-surface-dim py-24 px-8">
-      <div className="max-w-7xl mx-auto grid md:grid-cols-2 gap-20 items-center">
-        <div className="order-2 md:order-1">
-          {/* Dashboard Mockup */}
-          <div className="bg-surface-container-lowest rounded-xl shadow-xl overflow-hidden border border-outline-variant/10">
-            <div className="p-6 border-b border-surface-dim flex justify-between items-center">
-              <h3 className="font-bold flex items-center gap-2">
-                <span className="material-symbols-outlined text-primary">
-                  monitoring
-                </span>
-                Marketplace
-              </h3>
-              <span className="text-xs font-bold text-primary px-2 py-1 bg-primary-fixed-dim/20 rounded">
-                Live Feed
-              </span>
-            </div>
-            <div className="overflow-x-auto">
-              <table className="w-full text-left">
-                <thead className="bg-surface-container-low">
-                  <tr>
-                    <th className="px-6 py-3 text-[10px] font-bold uppercase text-on-surface-variant">
-                      Amount
-                    </th>
-                    <th className="px-6 py-3 text-[10px] font-bold uppercase text-on-surface-variant">
-                      Discount
-                    </th>
-                    <th className="px-6 py-3 text-[10px] font-bold uppercase text-on-surface-variant">
-                      Yield
-                    </th>
-                    <th className="px-6 py-3"></th>
-                  </tr>
-                </thead>
-                <tbody className="text-sm">
-                  {marketplaceData.map((item, index) => (
-                    <tr key={index} className="border-b border-surface-dim">
-                      <td className="px-6 py-4 font-medium">{item.amount}</td>
-                      <td className="px-6 py-4 text-on-surface-variant">
-                        {item.discount}
-                      </td>
-                      <td className="px-6 py-4 text-green-600 font-bold">
-                        {item.yield}
-                      </td>
-                      <td className="px-6 py-4">
-                        <button 
-                          onClick={handleFund}
-                          className="bg-primary text-surface-container-lowest text-xs px-3 py-1.5 rounded font-bold"
-                        >
-                          Fund
-                        </button>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </div>
+    <section id="for-lps" className="bg-surface-dim py-24 px-8 transition-colors duration-300">
+      <div className="max-w-7xl mx-auto grid lg:grid-cols-2 gap-20 items-center">
+        <div className="order-2 lg:order-1">
+          <LPDashboard />
         </div>
-        <div className="order-1 md:order-2">
-          <h2 className="text-4xl font-headline mb-6">
+        <div className="order-1 lg:order-2">
+          <h2 className="text-4xl font-headline mb-6 text-foreground">
             Earn real yield backed by real business.
           </h2>
           <ul className="space-y-6">
             {features.map((feature, index) => (
               <li key={index} className="flex gap-4">
                 <span
-                  className="material-symbols-outlined text-primary-container"
+                  className="material-symbols-outlined text-primary"
                   style={{ fontVariationSettings: "'FILL' 1" }}
                 >
                   currency_exchange
                 </span>
                 <div>
-                  <p className="font-bold">{feature.title}</p>
+                  <p className="font-bold text-foreground">{feature.title}</p>
                   <p className="text-on-surface-variant text-sm">
                     {feature.description}
                   </p>
@@ -118,6 +49,19 @@ export default function ForLPs() {
               </li>
             ))}
           </ul>
+          
+          <div className="mt-12 p-8 bg-primary-container/20 rounded-2xl border border-primary/10">
+            <h4 className="font-bold mb-2 flex items-center gap-2">
+              <span className="material-symbols-outlined text-primary">info</span>
+              How it works for LPs
+            </h4>
+            <p className="text-sm text-on-surface-variant leading-relaxed">
+              When you fund an invoice, your USDC is held in a secure Soroban smart contract. 
+              The freelancer receives their funds (minus the discount) immediately. 
+              Once the payer settles the invoice, the full amount is released to you, 
+              including the discount as your earned yield.
+            </p>
+          </div>
         </div>
       </div>
     </section>
