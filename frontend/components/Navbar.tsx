@@ -1,8 +1,9 @@
 "use client";
 
+import Link from "next/link";
+import { useWallet } from "../context/WalletContext";
 import { useTheme } from "../hooks/useTheme";
-import NotificationBell from "./NotificationBell";
-import WalletButton from "./WalletButton";
+import { formatAddress } from "../utils/format";
 
 export default function Navbar() {
   const { theme, toggleTheme } = useTheme();
@@ -25,7 +26,22 @@ export default function Navbar() {
           <a className="text-on-surface-variant hover:text-primary text-sm font-medium" href="#for-lps">
             For LPs
           </a>
-          <a className="text-on-surface-variant hover:text-primary text-sm font-medium" href="#">
+          <Link
+            className="text-on-surface-variant hover:text-primary transition-colors duration-200 text-sm font-medium"
+            href="/governance"
+          >
+            Governance
+          </Link>
+          <Link
+            className="text-on-surface-variant hover:text-primary transition-colors duration-200 text-sm font-medium"
+            href="/payer"
+          >
+            Pay Invoices
+          </Link>
+          <a
+            className="text-on-surface-variant hover:text-primary transition-colors duration-200 text-sm font-medium"
+            href="#"
+          >
             Docs
           </a>
         </div>
