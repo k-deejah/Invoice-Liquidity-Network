@@ -319,7 +319,7 @@ export default function LPDashboard() {
         />
       ) : (
       <div id="discovery-table" className="overflow-x-auto">
-        <table className="w-full text-left">
+        <table aria-label="LP invoice discovery table" className="w-full text-left">
           <thead className="bg-surface-container-low">
             <tr>
               <th className="px-6 py-4 text-[11px] font-bold uppercase text-on-surface-variant tracking-wider">
