@@ -659,3 +659,4 @@ mod tests_state_machine;
 mod tests_security;
 mod tests_protocol_fee;
 mod tests_distribution;
+mod tests_storage;
