@@ -12,6 +12,9 @@ import {
   submitSignedTransaction,
 } from "../utils/soroban";
 import { formatUSDC, formatAddress, formatDate, calculateYield } from "../utils/format";
+import { usePayerScores } from "../hooks/usePayerScores";
+import RiskBadge from "./RiskBadge";
+import { RISK_SORT_ORDER } from "../utils/risk";
 
 type Tab = "discovery" | "my-funded";
 type FundingStep = "approve" | "fund";
@@ -28,7 +31,7 @@ export default function LPDashboard() {
   const [isCheckingAllowance, setIsCheckingAllowance] = useState(false);
   const [allowance, setAllowance] = useState<bigint | null>(null);
   const [fundingError, setFundingError] = useState<string | null>(null);
-  const [sortKey, setSortKey] = useState<keyof Invoice>("amount");
+  const [sortKey, setSortKey] = useState<keyof Invoice | "risk">("amount");
   const [sortOrder, setSortOrder] = useState<"asc" | "desc">("desc");
 
   const fetchData = useCallback(async () => {
@@ -46,6 +49,10 @@ export default function LPDashboard() {
   useEffect(() => {
     fetchData();
   }, [fetchData]);
+
+  // Fetch payer scores in batch whenever invoices change
+  const discoveryInvoicesList = invoices.filter(i => i.status === "Pending");
+  const { scores: payerScores, risks: payerRisks } = usePayerScores(discoveryInvoicesList);
 
   const handleFund = async (invoice: Invoice) => {
     if (!address) {
@@ -144,6 +151,11 @@ export default function LPDashboard() {
   };
 
   const sortedInvoices = [...invoices].sort((a: any, b: any) => {
+    if (sortKey === "risk") {
+      const ra = RISK_SORT_ORDER[payerRisks.get(a.payer) ?? "Unknown"];
+      const rb = RISK_SORT_ORDER[payerRisks.get(b.payer) ?? "Unknown"];
+      return sortOrder === "asc" ? ra - rb : rb - ra;
+    }
     const aVal = a[sortKey];
     const bVal = b[sortKey];
     if (aVal < bVal) return sortOrder === "asc" ? -1 : 1;
@@ -154,7 +166,7 @@ export default function LPDashboard() {
   const discoveryInvoices = sortedInvoices.filter(i => i.status === "Pending");
   const myFundedInvoices = sortedInvoices.filter(i => i.funder === address);
 
-  const toggleSort = (key: keyof Invoice) => {
+  const toggleSort = (key: keyof Invoice | "risk") => {
     if (sortKey === key) {
       setSortOrder(sortOrder === "asc" ? "desc" : "asc");
     } else {
@@ -222,6 +234,11 @@ export default function LPDashboard() {
               <th className="px-6 py-4 text-[11px] font-bold uppercase text-on-surface-variant tracking-wider">
                 Est. Yield
               </th>
+              {activeTab === "discovery" && (
+                <th className="px-6 py-4 text-[11px] font-bold uppercase text-on-surface-variant tracking-wider cursor-pointer" onClick={() => toggleSort("risk")}>
+                  Risk {sortKey === "risk" && (sortOrder === "asc" ? "↑" : "↓")}
+                </th>
+              )}
               <th className="px-6 py-4"></th>
             </tr>
           </thead>
@@ -258,6 +275,14 @@ export default function LPDashboard() {
                   <td className="px-6 py-5 font-bold text-green-600">
                     {formatUSDC(calculateYield(invoice.amount, invoice.discount_rate))}
                   </td>
+                  {activeTab === "discovery" && (
+                    <td className="px-6 py-5">
+                      <RiskBadge
+                        risk={payerRisks.get(invoice.payer) ?? "Unknown"}
+                        score={payerScores.get(invoice.payer) ?? null}
+                      />
+                    </td>
+                  )}
                   <td className="px-6 py-5 text-right">
                     {activeTab === "discovery" ? (
                       <button

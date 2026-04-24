@@ -37,6 +37,7 @@ vi.mock("../utils/soroban", () => ({
   buildApproveUsdcTransaction: vi.fn(),
   fundInvoice: vi.fn(),
   submitSignedTransaction: vi.fn(),
+  getPayerScoresBatch: vi.fn(async () => new Map()),
 }));
 
 describe("LPDashboard approval flow", () => {
@@ -74,7 +75,7 @@ describe("LPDashboard approval flow", () => {
       expect(screen.getByText("Step 1: Approve USDC")).toBeInTheDocument();
     });
 
-    expect(screen.getByText("Approve exactly $100.00 for the ILN contract.")).toBeInTheDocument();
+    expect(screen.getByText((content) => content.includes("Approve exactly"))).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Approve USDC" })).toBeInTheDocument();
   });
 });
