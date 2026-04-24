@@ -57,7 +57,11 @@ fn setup_security() -> TestEnv {
     // Deploy and initialise the ILN contract
     let contract_id = env.register(InvoiceLiquidityContract, ());
     let contract = InvoiceLiquidityContractClient::new(&env, &contract_id);
-    contract.initialize(&usdc_address);
+
+    let xlm_admin = Address::generate(&env);
+    let xlm_contract_id = env.register_stellar_asset_contract_v2(xlm_admin);
+    let xlm_address = xlm_contract_id.address();
+    contract.initialize(&usdc_admin, &usdc_address, &xlm_address);
 
     // Fix ledger timestamp
     let mut ledger_info = env.ledger().get();
@@ -98,9 +102,14 @@ fn test_overflow_max_amount_does_not_panic() {
     let disc_rate: u32 = 5_000;
 
     // Submit should succeed — amount > 0, discount valid, due date future
-    let id = t
-        .contract
-        .submit_invoice(&t.freelancer, &t.payer, &amount, &due, &disc_rate, &t.token.address);
+    let id = t.contract.submit_invoice(
+        &t.freelancer,
+        &t.payer,
+        &amount,
+        &due,
+        &disc_rate,
+        &t.token.address,
+    );
 
     // fund_invoice calls checked_mul; with i128::MAX * 5_000 overflowing,
     // the contract falls back to discount_amount = 0.
@@ -142,9 +151,14 @@ fn test_overflow_boundary_half_max_amount_no_panic() {
     let due = due_date(&t);
     let disc_rate: u32 = 5_000; // 50%
 
-    let id = t
-        .contract
-        .submit_invoice(&t.freelancer, &t.payer, &amount, &due, &disc_rate, &t.token.address);
+    let id = t.contract.submit_invoice(
+        &t.freelancer,
+        &t.payer,
+        &amount,
+        &due,
+        &disc_rate,
+        &t.token.address,
+    );
 
     // Must not panic
     t.contract.fund_invoice(&t.funder, &id, &amount);
@@ -188,9 +202,14 @@ fn test_payout_never_negative_for_valid_inputs() {
 
         let fl_before = t.token.balance(&t.freelancer);
 
-        let id = t
-            .contract
-            .submit_invoice(&t.freelancer, &t.payer, &amount, &due, &disc_rate, &t.token.address);
+        let id = t.contract.submit_invoice(
+            &t.freelancer,
+            &t.payer,
+            &amount,
+            &due,
+            &disc_rate,
+            &t.token.address,
+        );
 
         t.contract.fund_invoice(&t.funder, &id, &amount);
 
@@ -214,12 +233,22 @@ fn test_funding_invoice_a_does_not_affect_invoice_b() {
     let due = due_date(&t);
 
     // Submit two independent invoices
-    let id_a = t
-        .contract
-        .submit_invoice(&t.freelancer, &t.payer, &1_000_000_000, &due, &300, &t.token.address);
-    let id_b = t
-        .contract
-        .submit_invoice(&t.freelancer, &t.payer, &2_000_000_000, &due, &500, &t.token.address);
+    let id_a = t.contract.submit_invoice(
+        &t.freelancer,
+        &t.payer,
+        &1_000_000_000,
+        &due,
+        &300,
+        &t.token.address,
+    );
+    let id_b = t.contract.submit_invoice(
+        &t.freelancer,
+        &t.payer,
+        &2_000_000_000,
+        &due,
+        &500,
+        &t.token.address,
+    );
 
     // Check B's state before any funding
     let invoice_b_before = t.contract.get_invoice(&id_b);
@@ -283,12 +312,22 @@ fn test_storage_isolation_adjacent_invoice_ids() {
     token_admin.mint(&new_payer, &10_000_000_000);
     token_admin.mint(&new_funder, &10_000_000_000);
 
-    let id_1 = t
-        .contract
-        .submit_invoice(&t.freelancer, &new_payer, &1_000_000_000, &due, &300, &t.token.address);
-    let id_2 = t
-        .contract
-        .submit_invoice(&t.freelancer, &new_payer, &5_000_000_000, &due, &100, &t.token.address);
+    let id_1 = t.contract.submit_invoice(
+        &t.freelancer,
+        &new_payer,
+        &1_000_000_000,
+        &due,
+        &300,
+        &t.token.address,
+    );
+    let id_2 = t.contract.submit_invoice(
+        &t.freelancer,
+        &new_payer,
+        &5_000_000_000,
+        &due,
+        &100,
+        &t.token.address,
+    );
 
     // Sanity: IDs should be sequential
     assert_eq!(id_1, 1, "First invoice must have ID 1");

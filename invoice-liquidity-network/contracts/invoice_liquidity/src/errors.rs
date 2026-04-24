@@ -15,4 +15,5 @@ pub enum ContractError {
     NothingToClaim = 10,
     NotYetDefaulted = 11,
     OverfundingRejected = 12,
+    BatchTooLarge = 13,
 }

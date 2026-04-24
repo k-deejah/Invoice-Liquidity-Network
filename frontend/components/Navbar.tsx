@@ -39,6 +39,12 @@ export default function Navbar() {
           >
             Pay Invoices
           </Link>
+          <Link
+            className="text-on-surface-variant hover:text-primary transition-colors duration-200 text-sm font-medium"
+            href="/analytics"
+          >
+            Analytics
+          </Link>
           <a
             className="text-on-surface-variant hover:text-primary transition-colors duration-200 text-sm font-medium"
             href="#"

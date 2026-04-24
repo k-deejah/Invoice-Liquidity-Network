@@ -24,6 +24,7 @@ pub struct Invoice {
     pub id: u64,
     pub freelancer: Address, // who submitted the invoice (receives liquidity)
     pub payer: Address,      // the client who owes the money
+    pub token: Address,      // token used for this invoice lifecycle
     pub amount: i128,        // full invoice value in stroops (1 USDC = 10_000_000)
     pub due_date: u64,       // Unix timestamp — when the payer must settle by
     pub discount_rate: u32,  // basis points, e.g. 300 = 3.00%
@@ -31,6 +32,17 @@ pub struct Invoice {
     pub funder: Option<Address>, // set when an LP funds the invoice (legacy for full funding)
     pub funded_at: Option<u64>,  // ledger timestamp when funding occurred
     pub amount_funded: i128,     // cumulative amount funded so far
+}
+
+#[contracttype]
+#[derive(Clone, Debug)]
+pub struct InvoiceParams {
+    pub freelancer: Address,
+    pub payer: Address,
+    pub amount: i128,
+    pub due_date: u64,
+    pub discount_rate: u32,
+    pub token: Address,
 }
 
 // ----------------------------------------------------------------
@@ -46,6 +58,9 @@ pub enum StorageKey {
     InvoiceFunders(u64), // List of funders for a partially funded invoice
     ApprovedToken(Address),
     TokenList,
+    Admin,
+    FeeRate,
+    MaxDiscountRate,
 }
 
 // ----------------------------------------------------------------

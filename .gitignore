@@ -77,3 +77,6 @@ desktop.ini
 .turbo/
 .cache/
 *.pem
+
+issue.md
+pr.md

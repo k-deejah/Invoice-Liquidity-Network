@@ -24,6 +24,20 @@ export function formatTokenAmount(
 
 export function formatUSDC(amount: bigint): string {
   return formatTokenAmount(amount, { symbol: "USDC", decimals: 7 });
+export function formatTokenAmount(amount: bigint | string | number, decimals: number, symbol: string): string {
+  const value = Number(amount) / Math.pow(10, decimals);
+  
+  // Use Intl.NumberFormat for regular numbers with grouping
+  const formatter = new Intl.NumberFormat('en-US', {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: decimals,
+  });
+  
+  return `${formatter.format(value)} ${symbol}`;
+}
+
+export function formatUSDC(amount: bigint): string {
+  return formatTokenAmount(amount, 7, 'USDC');
 }
 
 export function formatAddress(address: string): string {

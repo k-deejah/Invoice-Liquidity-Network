@@ -509,3 +509,61 @@ function extractInvoiceIdFromTransaction(result: unknown): bigint | null {
 
   return null;
 }
+
+// ─── Payer score ──────────────────────────────────────────────────────────────
+
+export interface PayerScoreResult {
+  score: number;
+  settled_on_time: number;
+  defaults: number;
+}
+
+/**
+ * Fetch the reputation score for a single payer address.
+ * Returns null if the contract returns no data (new/unknown payer).
+ */
+export async function getPayerScore(payerAddress: string): Promise<PayerScoreResult | null> {
+  try {
+    const params: xdr.ScVal[] = [Address.fromString(payerAddress).toScVal()];
+    const callResult = await server.simulateTransaction(
+      buildReadTransaction(CONTRACT_ID, "payer_score", params)
+    );
+
+    if (!rpc.Api.isSimulationSuccess(callResult) || !callResult.result?.retval) {
+      return null;
+    }
+
+    const native = scValToNative(callResult.result.retval);
+    // If the contract returns None/null for an unknown payer
+    if (native === null || native === undefined) return null;
+
+    return {
+      score: Number(native.score ?? native),
+      settled_on_time: Number(native.settled_on_time ?? 0),
+      defaults: Number(native.defaults ?? 0),
+    };
+  } catch {
+    // Unknown payer or function not present — treat as no score
+    return null;
+  }
+}
+
+/**
+ * Fetch payer scores for a batch of unique addresses in parallel.
+ * Returns a Map from address → score result (or null).
+ * Deduplicates addresses before fetching.
+ */
+export async function getPayerScoresBatch(
+  addresses: string[]
+): Promise<Map<string, PayerScoreResult | null>> {
+  const unique = [...new Set(addresses)];
+  const results = await Promise.allSettled(unique.map((addr) => getPayerScore(addr)));
+
+  const map = new Map<string, PayerScoreResult | null>();
+  unique.forEach((addr, i) => {
+    const result = results[i];
+    map.set(addr, result.status === "fulfilled" ? result.value : null);
+  });
+  return map;
+}
+
