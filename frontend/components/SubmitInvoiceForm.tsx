@@ -25,11 +25,22 @@ const INITIAL_FORM: InvoiceFormValues = {
   tokenId: "",
 };
 
-export default function SubmitInvoiceForm() {
+interface SubmitInvoiceFormProps {
+  initialValues?: Partial<InvoiceFormValues>;
+  prefillId?: string;
+}
+
+export default function SubmitInvoiceForm({ initialValues, prefillId }: SubmitInvoiceFormProps) {
   const { addToast, updateToast } = useToast();
   const { address, isConnected, connect, disconnect, networkMismatch, error: walletError, signTx } = useWallet();
   const { tokens, tokenMap, defaultToken, isLoading: tokensLoading, error: tokensError } = useApprovedTokens();
-  const [form, setForm] = useState<InvoiceFormValues>(INITIAL_FORM);
+  
+  const [showBanner, setShowBanner] = useState(!!prefillId);
+  const [form, setForm] = useState<InvoiceFormValues>({
+    ...INITIAL_FORM,
+    ...initialValues,
+    dueDate: "", // Always blank per requirements
+  });
   const [errors, setErrors] = useState<Partial<Record<keyof InvoiceFormValues | "wallet" | "submit", string>>>({});
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [submittedInvoiceId, setSubmittedInvoiceId] = useState<string | null>(null);
@@ -183,6 +194,23 @@ export default function SubmitInvoiceForm() {
             {errors.wallet ?? walletError}
           </div>
         ) : null}
+
+        {showBanner && prefillId && (
+          <div className="flex items-center justify-between rounded-2xl border border-primary/20 bg-primary/10 px-5 py-4 transition-all animate-in fade-in slide-in-from-top-4">
+            <div className="flex items-center gap-3">
+              <span className="material-symbols-outlined text-primary">info</span>
+              <p className="text-sm font-bold text-primary">Pre-filled from invoice #{prefillId}</p>
+            </div>
+            <button 
+              type="button"
+              onClick={() => setShowBanner(false)}
+              className="rounded-full p-1 hover:bg-primary/20 text-primary transition-colors"
+              aria-label="Dismiss banner"
+            >
+              <span className="material-symbols-outlined text-lg">close</span>
+            </button>
+          </div>
+        )}
 
         <form className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_320px]" onSubmit={handleSubmit}>
           <div className="space-y-5">
