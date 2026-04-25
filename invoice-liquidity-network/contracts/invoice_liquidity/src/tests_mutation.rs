@@ -220,18 +220,17 @@ fn mt04_payer_score_decreases_by_exactly_five_on_default() {
 #[test]
 fn mt05_payer_score_floors_at_zero_not_negative() {
     let t = setup();
-    let due_date = t.env.ledger().timestamp() + DUE_DATE_OFFSET;
-
     // Submit and default 9 invoices.
     // Starting score = 50, after 9 defaults: 50 - 5*9 = 5
     // The 10th default would subtract 5 from 5, which would underflow if the
     // `> 5` guard were mutated to `> 0`.  With the correct guard the result is 0.
     for _ in 0..9 {
+        let current_due = t.env.ledger().timestamp() + DUE_DATE_OFFSET;
         let id = t.contract.submit_invoice(
             &t.freelancer,
             &t.payer,
             &INVOICE_AMOUNT,
-            &due_date,
+            &current_due,
             &DISCOUNT_RATE,
             &t.token.address,
         );

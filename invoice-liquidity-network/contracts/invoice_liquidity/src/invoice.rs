@@ -12,6 +12,7 @@ pub enum InvoiceStatus {
     PartiallyFunded, // partially funded by one or more LPs
     Paid,            // payer has settled in full, LP has been released
     Defaulted,       // past due_date and still unpaid
+    Cancelled,       // freelancer cancelled the invoice before funding
 }
 
 // ----------------------------------------------------------------

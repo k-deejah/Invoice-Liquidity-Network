@@ -273,6 +273,7 @@ impl InvoiceLiquidityContract {
             InvoiceStatus::Defaulted => return Err(ContractError::InvoiceDefaulted),
             InvoiceStatus::Funded => return Err(ContractError::AlreadyFunded),
             InvoiceStatus::Pending | InvoiceStatus::PartiallyFunded => {} // all good
+            InvoiceStatus::Cancelled => return Err(ContractError::InvoiceNotFound),
         }
 
         if invoice.amount_funded + fund_amount > invoice.amount {
@@ -355,6 +356,7 @@ impl InvoiceLiquidityContract {
             }
             InvoiceStatus::Paid => return Err(ContractError::AlreadyPaid),
             InvoiceStatus::Defaulted => return Err(ContractError::InvoiceDefaulted),
+            InvoiceStatus::Cancelled => return Err(ContractError::InvoiceNotFound),
         }
 
         let old_freelancer = invoice.freelancer.clone();
@@ -365,6 +367,43 @@ impl InvoiceLiquidityContract {
         env.events().publish(
             (soroban_sdk::Symbol::new(&env, "transferred"),),
             (invoice_id, old_freelancer, new_freelancer),
+        );
+
+        Ok(())
+    }
+
+    // ------------------------------------------------------------
+    // cancel_invoice
+    // ------------------------------------------------------------
+    pub fn cancel_invoice(
+        env: Env,
+        invoice_id: u64,
+    ) -> Result<(), ContractError> {
+        if !invoice_exists(&env, invoice_id) {
+            return Err(ContractError::InvoiceNotFound);
+        }
+
+        let mut invoice = load_invoice(&env, invoice_id);
+
+        invoice.freelancer.require_auth();
+
+        match invoice.status {
+            InvoiceStatus::Pending => {}
+            InvoiceStatus::PartiallyFunded | InvoiceStatus::Funded => {
+                return Err(ContractError::AlreadyFunded)
+            }
+            InvoiceStatus::Paid => return Err(ContractError::AlreadyPaid),
+            InvoiceStatus::Defaulted => return Err(ContractError::InvoiceDefaulted),
+            InvoiceStatus::Cancelled => return Err(ContractError::InvoiceNotFound),
+        }
+
+        invoice.status = InvoiceStatus::Cancelled;
+
+        save_invoice(&env, &invoice);
+
+        env.events().publish(
+            (soroban_sdk::Symbol::new(&env, "cancelled"),),
+            (invoice_id,),
         );
 
         Ok(())
@@ -389,6 +428,7 @@ impl InvoiceLiquidityContract {
             InvoiceStatus::Paid => return Err(ContractError::AlreadyPaid),
             InvoiceStatus::Defaulted => return Err(ContractError::InvoiceDefaulted),
             InvoiceStatus::Funded => {}
+            InvoiceStatus::Cancelled => return Err(ContractError::InvoiceNotFound),
         }
 
         let funder = invoice.funder.clone().ok_or(ContractError::NotFunded)?;
@@ -460,6 +500,7 @@ impl InvoiceLiquidityContract {
                 Ok(0)
             }
             InvoiceStatus::Defaulted => Err(ContractError::InvoiceDefaulted),
+            InvoiceStatus::Cancelled => Err(ContractError::InvoiceNotFound),
             InvoiceStatus::Paid => {
                 // Yield = the discount amount the LP earned
                 let yield_amount = invoice
@@ -512,6 +553,7 @@ impl InvoiceLiquidityContract {
             }
             InvoiceStatus::Paid => return Err(ContractError::AlreadyPaid),
             InvoiceStatus::Defaulted => return Err(ContractError::InvoiceDefaulted),
+            InvoiceStatus::Cancelled => return Err(ContractError::InvoiceNotFound),
         }
 
         // --- Execution ---
@@ -661,4 +703,5 @@ mod tests_security;
 mod tests_protocol_fee;
 mod tests_distribution;
 mod tests_storage;
+mod tests_auth;
 mod tests_mutation;
