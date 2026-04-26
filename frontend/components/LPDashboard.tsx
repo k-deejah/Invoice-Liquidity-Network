@@ -5,6 +5,7 @@ import { useWallet } from "../context/WalletContext";
 import { useToast } from "../context/ToastContext";
 import TokenSelector, { TokenAmount } from "./TokenSelector";
 import InvoiceFilterBar from "./InvoiceFilterBar";
+import { useRouter } from "next/navigation";
 import { useApprovedTokens } from "../hooks/useApprovedTokens";
 import { applyInvoiceFilters, useInvoiceFilters } from "../hooks/useInvoiceFilters";
 import SkeletonRow, { LP_DISCOVERY_COLUMNS } from "./SkeletonRow";
@@ -48,6 +49,8 @@ export default function LPDashboard() {
   const [sortKey, setSortKey] = useState<keyof Invoice | "risk" | "yield">("amount");
   const [sortOrder, setSortOrder] = useState<"asc" | "desc">("desc");
   const [claimingInvoiceId, setClaimingInvoiceId] = useState<string | null>(null);
+  const [selectedInvoiceIds, setSelectedInvoiceIds] = useState<string[]>([]);
+  const router = useRouter();
   const {
     filters,
     setFilters,
@@ -200,6 +203,28 @@ export default function LPDashboard() {
     } finally {
       setIsFunding(false);
     }
+  };
+
+  const toggleInvoiceSelection = (id: string) => {
+    setSelectedInvoiceIds((prev) => {
+      if (prev.includes(id)) {
+        return prev.filter((i) => i !== id);
+      }
+      if (prev.length >= 3) {
+        addToast({
+          type: "warning",
+          title: "Selection Limit",
+          message: "You can compare up to 3 invoices",
+        });
+        return prev;
+      }
+      return [...prev, id];
+    });
+  };
+
+  const handleCompareInvoices = () => {
+    if (selectedInvoiceIds.length < 2) return;
+    router.push(`/lp/compare?ids=${selectedInvoiceIds.join(",")}`);
   };
 
   const handleClaimDefault = async (invoice: Invoice) => {
@@ -486,6 +511,16 @@ export default function LPDashboard() {
             My Funded
           </button>
         </div>
+
+        {selectedInvoiceIds.length >= 2 && (
+          <button
+            onClick={handleCompareInvoices}
+            className="flex items-center gap-2 bg-green-600 text-white px-4 py-2 rounded-lg text-sm font-bold shadow-lg hover:bg-green-700 transition-all animate-in fade-in slide-in-from-right-4"
+          >
+            <span className="material-symbols-outlined text-[18px]">compare_arrows</span>
+            Compare {selectedInvoiceIds.length} Invoices
+          </button>
+        )}
       </div>
       <div className="px-6 pt-4 flex flex-col gap-3">
         <InvoiceFilterBar
@@ -507,14 +542,15 @@ export default function LPDashboard() {
       ) : (
         <div className="overflow-x-auto">
           <table className="w-full text-left">
-            <thead className="bg-surface-container-low">
+            <thead className="bg-surface-container-low border-b border-surface-dim">
               <tr>
+                <th className="px-6 py-4 w-10"></th>
                 <th className="px-6 py-4 text-[11px] font-bold uppercase text-on-surface-variant tracking-wider">ID</th>
                 <th className="px-6 py-4 text-[11px] font-bold uppercase text-on-surface-variant tracking-wider">Freelancer</th>
                 <th className="px-6 py-4 text-[11px] font-bold uppercase text-on-surface-variant tracking-wider cursor-pointer group" onClick={() => toggleSort("amount")}>
                   Amount {sortKey === "amount" && (sortOrder === "asc" ? "↑" : "↓")}
                 </th>
-                <th id="risk-badge" className="px-6 py-4 text-[11px] font-bold uppercase text-on-surface-variant tracking-wider cursor-pointer group" onClick={() => toggleSort("discount_rate")}>
+                <th className="px-6 py-4 text-[11px] font-bold uppercase text-on-surface-variant tracking-wider cursor-pointer group" onClick={() => toggleSort("discount_rate")}>
                   Discount {sortKey === "discount_rate" && (sortOrder === "asc" ? "↑" : "↓")}
                 </th>
                 <th className="px-6 py-4 text-[11px] font-bold uppercase text-on-surface-variant tracking-wider cursor-pointer group" onClick={() => toggleSort("due_date")}>
@@ -545,7 +581,15 @@ export default function LPDashboard() {
                 </tr>
               ) : (
                 (activeTab === "discovery" ? discoveryInvoices : watchlistInvoices).map((invoice: any, index: number) => (
-                  <tr key={invoice.id.toString()} className="hover:bg-surface-variant/10 transition-colors">
+                  <tr key={invoice.id.toString()} className={`hover:bg-surface-variant/10 transition-colors ${selectedInvoiceIds.includes(invoice.id.toString()) ? 'bg-primary/5' : ''}`}>
+                    <td className="px-6 py-5">
+                      <input
+                        type="checkbox"
+                        checked={selectedInvoiceIds.includes(invoice.id.toString())}
+                        onChange={() => toggleInvoiceSelection(invoice.id.toString())}
+                        className="w-4 h-4 rounded border-outline-variant text-primary focus:ring-primary cursor-pointer"
+                      />
+                    </td>
                     <td className="px-6 py-5 font-bold text-primary">#{invoice.id.toString()}</td>
                     <td className="px-6 py-5">
                       <div className="flex flex-col">
