@@ -8,6 +8,7 @@ import FieldTooltip from "./FieldTooltip";
 import { useToast } from "../context/ToastContext";
 import { useWallet } from "../context/WalletContext";
 import { useApprovedTokens } from "../hooks/useApprovedTokens";
+import useAddressBook from "../hooks/useAddressBook";
 import {
   getMinimumDueDate,
   getYieldPreview,
@@ -52,6 +53,11 @@ export default function SubmitInvoiceForm({ initialValues, prefillId }: SubmitIn
   const effectiveTokenId = form.tokenId || defaultToken?.contractId || "";
   const selectedToken = tokenMap.get(effectiveTokenId) ?? defaultToken ?? null;
   const preview = getYieldPreview(form.amount, form.discountRate, selectedToken?.decimals ?? 7);
+  
+  const { addressBook, searchAddresses } = useAddressBook();
+  const [addressBookOpen, setAddressBookOpen] = useState(false);
+  const [addressBookQuery, setAddressBookQuery] = useState("");
+  const [highlightedIndex, setHighlightedIndex] = useState(-1);
 
   const setField = (field: keyof InvoiceFormValues, value: string) => {
     setForm((current) => ({ ...current, [field]: value }));
@@ -67,6 +73,37 @@ export default function SubmitInvoiceForm({ initialValues, prefillId }: SubmitIn
       addToast({ type: "success", title: "Invoice ID copied", message: `Invoice #${submittedInvoiceId} copied to clipboard.` });
     } catch {
       addToast({ type: "error", title: "Copy failed", message: "Unable to copy the invoice ID on this device." });
+    }
+  };
+
+  const handleSelectAddress = (address: string) => {
+    setField("payer", address);
+    setAddressBookOpen(false);
+    setAddressBookQuery("");
+    setHighlightedIndex(-1);
+  };
+
+  const handleAddressBookKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === "Escape") {
+      setAddressBookOpen(false);
+      setAddressBookQuery("");
+      setHighlightedIndex(-1);
+      return;
+    }
+
+    const filtered = searchAddresses(addressBookQuery || form.payer);
+    if (e.key === "ArrowDown") {
+      e.preventDefault();
+      setHighlightedIndex(
+        Math.min(filtered.length - 1, highlightedIndex + 1)
+      );
+    } else if (e.key === "ArrowUp") {
+      e.preventDefault();
+      setHighlightedIndex(Math.max(-1, highlightedIndex - 1));
+    } else if (e.key === "Enter" && highlightedIndex >= 0) {
+      e.preventDefault();
+      const selectedAddress = filtered[highlightedIndex];
+      handleSelectAddress(selectedAddress.address);
     }
   };
 
@@ -223,14 +260,50 @@ export default function SubmitInvoiceForm({ initialValues, prefillId }: SubmitIn
               error={errors.payer}
               hint={t("submitForm.payerHint")}
             >
-              <input
-                value={form.payer}
-                onChange={(event) => setField("payer", event.target.value)}
-                className="w-full rounded-2xl bg-surface-container-low px-4 py-3.5 text-sm border border-outline-variant/15 focus:border-primary focus:ring-2 focus:ring-primary/20 outline-none"
-                placeholder="G..."
-                autoComplete="off"
-                spellCheck={false}
-              />
+              <div className="relative">
+                <input
+                  value={form.payer}
+                  onChange={(event) => {
+                    setField("payer", event.target.value);
+                    setAddressBookQuery(event.target.value);
+                    setAddressBookOpen(true);
+                    setHighlightedIndex(-1);
+                  }}
+                  onKeyDown={handleAddressBookKeyDown}
+                  className="w-full rounded-2xl bg-surface-container-low px-4 py-3.5 text-sm border border-outline-variant/15 focus:border-primary focus:ring-2 focus:ring-primary/20 outline-none"
+                  placeholder="G..."
+                  autoComplete="off"
+                  spellCheck={false}
+                />
+                {addressBookOpen && (
+                  <div className="absolute left-0 right-0 mt-1 z-10 max-h-[200px] overflow-auto border border-surface-dim rounded-xl bg-surface-container-low shadow-lg">
+                    {addressBookQuery ? (
+                      searchAddresses(addressBookQuery).map((entry, index) => (
+                        <div
+                          key={entry.id}
+                          className={`px-4 py-3 text-sm cursor-pointer ${
+                            highlightedIndex === index
+                              ? "bg-primary text-surface-container-lowest"
+                              : "hover:bg-surface-variant/50"
+                          }`}
+                          onClick={() => handleSelectAddress(entry.address)}
+                        >
+                          <div className="flex justify-between">
+                            <span className="font-medium">{entry.nickname}</span>
+                            <span className="text-xs text-on-surface-variant/50">
+                              {entry.address.slice(0, 6)}...{entry.address.slice(-4)}
+                            </span>
+                          </div>
+                        </div>
+                      ))
+                    ) : (
+                      <div className="px-4 py-3 text-xs text-on-surface-variant">
+                        {t("addressBook.noMatches")}
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
             </Field>
 
             <TokenSelector
