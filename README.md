@@ -494,3 +494,7 @@ Built on [Stellar](https://stellar.org) and [Soroban](https://soroban.stellar.or
 
 See [CONTRIBUTING.md](./CONTRIBUTING.md) to contribute.
 ---
+
+## Notifications
+
+See [docs/notifications.md](docs/notifications.md) for details on the notification system, including user and developer setup, webhook payloads, and self-hosting instructions.
