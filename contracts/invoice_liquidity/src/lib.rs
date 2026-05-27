@@ -1312,3 +1312,4 @@ mod tests_state_machine;
 mod tests_storage;
 #[cfg(test)]
 mod tests_invoice_paid_event;
+mod tests_reputation_edge_cases;

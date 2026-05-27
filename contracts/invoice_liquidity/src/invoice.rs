@@ -315,6 +315,7 @@ pub fn save_queue_resolution(env: &Env, invoice_id: u64, approved_lp: &Address) 
     env.storage()
         .persistent()
         .set(&StorageKey::QueueResolution(invoice_id), approved_lp);
+}
 // Contract stats helpers
 // ----------------------------------------------------------------
 

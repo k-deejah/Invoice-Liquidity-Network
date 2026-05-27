@@ -4,6 +4,10 @@ members = [
   "contracts/*",
 ]
 
+exclude = [
+  "contracts/tests"
+]
+
 [workspace.dependencies]
 soroban-sdk = "25"
 
