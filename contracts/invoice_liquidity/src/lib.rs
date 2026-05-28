@@ -3,6 +3,7 @@
 pub mod errors;
 pub mod events;
 pub mod invoice;
+pub mod storage;
 pub mod config;
 pub mod rate_logic;
 pub mod access;
@@ -11,28 +12,27 @@ mod tests_regression;
 mod tests_new_features;
 
 pub use errors::ContractError;
-pub use invoice::{Invoice, InvoiceParams, InvoiceStatus, ReputationScore};
-pub use config::{Config, ConfigError, set_config, get_config};
-
+pub use crate::invoice::{Invoice, InvoiceParams, InvoiceStatus, ReputationScore, AppealRecord, LpFundRequest};
+pub use crate::storage::DataKey;
+pub use config::{Config, ConfigError};
 use soroban_sdk::{
     contract, contractimpl, token::Client as TokenClient, vec, Address, BytesN, Env, IntoVal,
     Symbol, Vec,
 };
 
 use events::{
-    AdminChanged, AppealResolved, ContractPaused, ContractUnpaused, DefaultAppealed, FundQueueResolved, FundRequested,
-    InvoiceCancelled, InvoiceDefaulted, InvoiceFunded, InvoicePaid, InvoicePartiallyPaid, InvoiceSubmitted,
+    AdminChanged, AppealResolved, ContractPaused, ContractUnpaused, DefaultAppealed, DisputeResolved, FundQueueResolved, FundRequested,
+    InvoiceCancelled, InvoiceDefaulted, InvoiceDisputed, InvoiceFunded, InvoicePaid, InvoicePartiallyPaid, InvoiceSubmitted,
     InvoiceTransferred, InvoiceUpdated,
 };
 use invoice::{
-    add_volume, get_appeal, get_contract_stats, get_fund_queue, get_invoice_funders, get_lp_score,
+    add_volume, get_appeal, get_contract_stats, get_dispute, get_fund_queue, get_invoice_funders, get_lp_score,
     get_payer_score, get_pre_default_payer_score, get_queue_resolution, increment_total_funded,
     increment_total_invoices, increment_total_paid, invoice_exists, is_paused, load_invoice,
-    next_invoice_id, save_appeal, save_fund_queue, save_invoice, save_invoice_funders,
+    next_invoice_id, save_appeal, save_dispute, save_fund_queue, save_invoice, save_invoice_funders,
     save_pre_default_payer_score, save_queue_resolution, set_lp_score, set_paused, set_payer_score,
-    AppealRecord, ContractStats, LpFundRequest, StorageKey,
+    ContractStats, DisputeRecord, StorageKey,
 };
-
 // 30-day window in seconds for a payer to file an appeal after a default.
 const APPEAL_WINDOW_SECONDS: u64 = 30 * 24 * 60 * 60;
 
@@ -65,25 +65,25 @@ impl InvoiceLiquidityContract {
         token: Address,
         xlm_token: Address,
     ) -> Result<(), ContractError> {
-        if env.storage().instance().has(&StorageKey::InvoiceCount) {
+        if env.storage().instance().has(&crate::storage::DataKey::InvoiceCount) {
             return Err(ContractError::AlreadyInitialized);
         }
 
-        env.storage().instance().set(&StorageKey::Admin, &admin);
-        env.storage().instance().set(&StorageKey::FeeRate, &0_u32);
+        env.storage().instance().set(&crate::storage::DataKey::Admin, &admin);
+        env.storage().instance().set(&crate::storage::DataKey::FeeRate, &0_u32);
         env.storage()
             .instance()
-            .set(&StorageKey::MaxDiscountRate, &5000_u32);
+            .set(&crate::storage::DataKey::MaxDiscountRate, &5000_u32);
 
         // approve first token (USDC or default)
         env.storage()
             .persistent()
-            .set(&StorageKey::ApprovedToken(token.clone()), &true);
+            .set(&crate::storage::DataKey::ApprovedToken(token.clone()), &true);
 
         // approve native XLM SAC
         env.storage()
             .persistent()
-            .set(&StorageKey::ApprovedToken(xlm_token.clone()), &true);
+            .set(&crate::storage::DataKey::ApprovedToken(xlm_token.clone()), &true);
 
         let mut list: Vec<Address> = Vec::new(&env);
         list.push_back(token.clone());
@@ -91,7 +91,7 @@ impl InvoiceLiquidityContract {
 
         env.storage()
             .persistent()
-            .set(&StorageKey::TokenList, &list);
+            .set(&crate::storage::DataKey::TokenList, &list);
 
         Ok(())
     }
@@ -144,18 +144,18 @@ impl InvoiceLiquidityContract {
 
         env.storage()
             .persistent()
-            .set(&StorageKey::ApprovedToken(token.clone()), &true);
+            .set(&crate::storage::DataKey::ApprovedToken(token.clone()), &true);
 
         let mut list: Vec<Address> = env
             .storage()
             .persistent()
-            .get(&StorageKey::TokenList)
+            .get(&crate::storage::DataKey::TokenList)
             .unwrap_or(Vec::new(&env));
         if !list.contains(&token) {
             list.push_back(token);
             env.storage()
                 .persistent()
-                .set(&StorageKey::TokenList, &list);
+                .set(&crate::storage::DataKey::TokenList, &list);
         }
         Ok(())
     }
@@ -308,6 +308,7 @@ impl InvoiceLiquidityContract {
             InvoiceStatus::Paid => return Err(ContractError::AlreadyPaid),
             InvoiceStatus::Defaulted => return Err(ContractError::InvoiceDefaulted),
             InvoiceStatus::Appealed => return Err(ContractError::InvoiceAppealed),
+            InvoiceStatus::Disputed => return Err(ContractError::InvoiceDisputed),
             InvoiceStatus::Expired => return Err(ContractError::InvoiceExpired),
             InvoiceStatus::Cancelled => return Err(ContractError::AlreadyCancelled),
         }
@@ -444,6 +445,7 @@ impl InvoiceLiquidityContract {
             InvoiceStatus::Paid => return Err(ContractError::AlreadyPaid),
             InvoiceStatus::Defaulted => return Err(ContractError::InvoiceDefaulted),
             InvoiceStatus::Appealed => return Err(ContractError::InvoiceAppealed),
+            InvoiceStatus::Disputed => return Err(ContractError::InvoiceDisputed),
             InvoiceStatus::Expired => return Err(ContractError::InvoiceExpired),
             InvoiceStatus::Cancelled => return Err(ContractError::AlreadyCancelled),
         }
@@ -552,6 +554,7 @@ impl InvoiceLiquidityContract {
             InvoiceStatus::Paid => return Err(ContractError::AlreadyPaid),
             InvoiceStatus::Defaulted => return Err(ContractError::InvoiceDefaulted),
             InvoiceStatus::Appealed => return Err(ContractError::InvoiceAppealed),
+            InvoiceStatus::Disputed => return Err(ContractError::InvoiceDisputed),
             InvoiceStatus::Expired => return Err(ContractError::InvoiceExpired),
             InvoiceStatus::Funded => return Err(ContractError::AlreadyFunded),
             InvoiceStatus::Pending | InvoiceStatus::PartiallyFunded => {} // all good
@@ -626,7 +629,7 @@ impl InvoiceLiquidityContract {
         let token_list: Vec<Address> = env
             .storage()
             .persistent()
-            .get(&StorageKey::TokenList)
+            .get(&crate::storage::DataKey::TokenList)
             .unwrap_or(Vec::new(&env));
         
         // Get token addresses from list, or use dummy addresses if not available
@@ -713,6 +716,7 @@ impl InvoiceLiquidityContract {
             InvoiceStatus::Paid => return Err(ContractError::AlreadyPaid),
             InvoiceStatus::Defaulted => return Err(ContractError::InvoiceDefaulted),
             InvoiceStatus::Appealed => return Err(ContractError::InvoiceAppealed),
+            InvoiceStatus::Disputed => return Err(ContractError::InvoiceDisputed),
             InvoiceStatus::Expired => return Err(ContractError::InvoiceExpired),
             InvoiceStatus::Cancelled => return Err(ContractError::AlreadyCancelled),
         }
@@ -769,6 +773,7 @@ impl InvoiceLiquidityContract {
             InvoiceStatus::Paid => return Err(ContractError::AlreadyPaid),
             InvoiceStatus::Defaulted => return Err(ContractError::InvoiceDefaulted),
             InvoiceStatus::Appealed => return Err(ContractError::InvoiceAppealed),
+            InvoiceStatus::Disputed => return Err(ContractError::InvoiceDisputed),
             InvoiceStatus::Expired => return Err(ContractError::InvoiceExpired),
             InvoiceStatus::Cancelled => return Err(ContractError::AlreadyCancelled),
         }
@@ -813,6 +818,7 @@ impl InvoiceLiquidityContract {
             InvoiceStatus::Paid => Err(ContractError::AlreadyPaid),
             InvoiceStatus::Defaulted => Err(ContractError::InvoiceDefaulted),
             InvoiceStatus::Appealed => Err(ContractError::InvoiceAppealed),
+            InvoiceStatus::Disputed => Err(ContractError::InvoiceDisputed),
             InvoiceStatus::Expired => Err(ContractError::InvoiceExpired),
             InvoiceStatus::Cancelled => Err(ContractError::AlreadyCancelled),
         }
@@ -846,6 +852,7 @@ impl InvoiceLiquidityContract {
             InvoiceStatus::Paid => return Err(ContractError::AlreadyPaid),
             InvoiceStatus::Defaulted => return Err(ContractError::InvoiceDefaulted),
             InvoiceStatus::Appealed => return Err(ContractError::InvoiceAppealed),
+            InvoiceStatus::Disputed => return Err(ContractError::InvoiceDisputed),
             InvoiceStatus::Expired => return Err(ContractError::InvoiceExpired),
             InvoiceStatus::Funded => {}
             InvoiceStatus::Cancelled => return Err(ContractError::AlreadyCancelled),
@@ -887,7 +894,7 @@ impl InvoiceLiquidityContract {
         let fee_rate: u32 = env
             .storage()
             .instance()
-            .get(&StorageKey::FeeRate)
+            .get(&crate::storage::DataKey::FeeRate)
             .unwrap_or(0);
         let protocol_fee = invoice
             .amount
@@ -896,7 +903,7 @@ impl InvoiceLiquidityContract {
             / 10_000;
 
         if protocol_fee > 0 {
-            let admin: Address = env.storage().instance().get(&StorageKey::Admin).unwrap();
+            let admin: Address = env.storage().instance().get(&crate::storage::DataKey::Admin).unwrap();
             token.transfer(&contract_address, &admin, &protocol_fee);
         }
 
@@ -986,6 +993,7 @@ impl InvoiceLiquidityContract {
             | InvoiceStatus::Funded => Ok(0),
             InvoiceStatus::Defaulted => Err(ContractError::InvoiceDefaulted),
             InvoiceStatus::Appealed => Err(ContractError::InvoiceAppealed),
+            InvoiceStatus::Disputed => Err(ContractError::InvoiceDisputed),
             InvoiceStatus::Expired => Err(ContractError::InvoiceExpired),
             InvoiceStatus::Cancelled => Err(ContractError::AlreadyCancelled),
             InvoiceStatus::Paid => {
@@ -1042,6 +1050,7 @@ impl InvoiceLiquidityContract {
             InvoiceStatus::Paid => return Err(ContractError::AlreadyPaid),
             InvoiceStatus::Defaulted => return Err(ContractError::InvoiceDefaulted),
             InvoiceStatus::Appealed => return Err(ContractError::InvoiceAppealed),
+            InvoiceStatus::Disputed => return Err(ContractError::InvoiceDisputed),
             InvoiceStatus::Expired => return Err(ContractError::InvoiceExpired),
             InvoiceStatus::Cancelled => return Err(ContractError::AlreadyCancelled),
         }
@@ -1222,7 +1231,218 @@ impl InvoiceLiquidityContract {
         Ok(())
     }
 
-    // ----------------------------------------------------------------
+    // ================================================================
+    // Dispute Mechanism — payer raised disputes before settlement
+    // ================================================================
+
+    /// Dispute an invoice before settlement.
+    ///
+    /// * `invoice_id`  – the invoice to dispute
+    /// * `reason_hash` – SHA-256 hash of off-chain dispute evidence
+    /// Access: Payer only
+    pub fn dispute_invoice(
+        env: Env,
+        invoice_id: u64,
+        reason_hash: BytesN<32>,
+    ) -> Result<(), ContractError> {
+        if is_paused(&env) {
+            return Err(ContractError::ContractPaused);
+        }
+
+        if !invoice_exists(&env, invoice_id) {
+            return Err(ContractError::InvoiceNotFound);
+        }
+
+        let mut invoice = load_invoice(&env, invoice_id);
+
+        // Only the payer may dispute.
+        require_payer_by_id(&env, invoice_id)?;
+
+        // Check if already disputed.
+        if get_dispute(&env, invoice_id).is_some() {
+            return Err(ContractError::AlreadyDisputed);
+        }
+
+        // Only Pending, PartiallyFunded or Funded invoices can be disputed (before settlement).
+        match invoice.status {
+            InvoiceStatus::Pending | InvoiceStatus::PartiallyFunded | InvoiceStatus::Funded => {}
+            InvoiceStatus::Paid => return Err(ContractError::AlreadyPaid),
+            InvoiceStatus::Defaulted => return Err(ContractError::InvoiceDefaulted),
+            InvoiceStatus::Appealed => return Err(ContractError::InvoiceAppealed),
+            InvoiceStatus::Expired => return Err(ContractError::InvoiceExpired),
+            InvoiceStatus::Cancelled => return Err(ContractError::AlreadyCancelled),
+            InvoiceStatus::Disputed => return Err(ContractError::AlreadyDisputed),
+        }
+
+        let now_ts = env.ledger().timestamp();
+        let now_ledger = env.ledger().sequence();
+
+        save_dispute(
+            &env,
+            invoice_id,
+            &DisputeRecord {
+                reason_hash: reason_hash.clone(),
+                disputed_at: now_ledger.into(),
+            },
+        );
+
+        invoice.status = InvoiceStatus::Disputed;
+        save_invoice(&env, &invoice);
+
+        env.events().publish_event(&InvoiceDisputed {
+            invoice_id,
+            payer: invoice.payer.clone(),
+            reason_hash,
+            disputed_at: now_ts,
+        });
+
+        Ok(())
+    }
+
+    /// Resolve a dispute (admin / governance only).
+    ///
+    /// * `resolution_hash` – Optional hash of resolution details
+    /// * `resolution`      – Ruling: 1 = Upheld (Payer right), 2 = Rejected (Freelancer right)
+    /// Access: Admin only
+    pub fn resolve_dispute(
+        env: Env,
+        invoice_id: u64,
+        resolution_hash: BytesN<32>,
+        resolution: u32,
+    ) -> Result<(), ContractError> {
+        require_admin(&env)?;
+
+        if !invoice_exists(&env, invoice_id) {
+            return Err(ContractError::InvoiceNotFound);
+        }
+
+        let mut invoice = load_invoice(&env, invoice_id);
+
+        if invoice.status != InvoiceStatus::Disputed {
+            return Err(ContractError::NotDisputed);
+        }
+
+        match resolution {
+            1 => {
+                // Upheld: Payer is right.
+                // Refund LPs if it was funded.
+                let funders = get_invoice_funders(&env, invoice_id);
+                if !funders.is_empty() {
+                    let token = token_client(&env, &invoice.token);
+                    let contract_address = env.current_contract_address();
+                    for i in 0..funders.len() {
+                        let (funder_addr, fund_amt) = funders.get(i).unwrap();
+                        let fund_discount = fund_amt
+                            .checked_mul(discount_rate_as_i128(invoice.discount_rate))
+                            .unwrap_or(0)
+                            / 10_000;
+                        let refund = fund_amt - fund_discount;
+                        token.transfer(&contract_address, &funder_addr, &refund);
+                    }
+                }
+                invoice.status = InvoiceStatus::Cancelled;
+            }
+            2 => {
+                // Rejected: Freelancer is right.
+                // Restore status based on funding level.
+                if invoice.amount_funded == invoice.amount {
+                    invoice.status = InvoiceStatus::Funded;
+                } else if invoice.amount_funded > 0 {
+                    invoice.status = InvoiceStatus::PartiallyFunded;
+                } else {
+                    invoice.status = InvoiceStatus::Pending;
+                }
+            }
+            _ => return Err(ContractError::Unauthorized), // Invalid resolution
+        }
+
+        save_invoice(&env, &invoice);
+
+        env.events().publish_event(&DisputeResolved {
+            invoice_id,
+            resolution_hash,
+            resolution,
+            resolved_at: env.ledger().timestamp(),
+        });
+
+        Ok(())
+    }
+
+    /// Auto-resolve a dispute after the timeout has passed.
+    ///
+    /// * `invoice_id` – the invoice to auto-resolve
+    /// Access: Anyone
+    pub fn auto_resolve_dispute(env: Env, invoice_id: u64) -> Result<(), ContractError> {
+        if !invoice_exists(&env, invoice_id) {
+            return Err(ContractError::InvoiceNotFound);
+        }
+
+        let mut invoice = load_invoice(&env, invoice_id);
+
+        if invoice.status != InvoiceStatus::Disputed {
+            return Err(ContractError::NotDisputed);
+        }
+
+        let dispute = get_dispute(&env, invoice_id).ok_or(ContractError::InvoiceNotFound)?;
+        let config = crate::storage::get_config(&env).ok_or(ContractError::Unauthorized)?;
+
+        let now_ledger = env.ledger().sequence();
+        
+        if u64::from(now_ledger) < dispute.disputed_at + config.dispute_timeout_ledgers {
+             return Err(ContractError::Unauthorized); // Or a more specific error like TimeoutNotReached
+        }
+
+        // Auto-resolve: Default to Rejected (Freelancer right) to prevent DOS.
+        if invoice.amount_funded == invoice.amount {
+            invoice.status = InvoiceStatus::Funded;
+        } else if invoice.amount_funded > 0 {
+            invoice.status = InvoiceStatus::PartiallyFunded;
+        } else {
+            invoice.status = InvoiceStatus::Pending;
+        }
+
+        save_invoice(&env, &invoice);
+
+        env.events().publish_event(&DisputeResolved {
+            invoice_id,
+            resolution_hash: BytesN::from_array(&env, &[0u8; 32]),
+            resolution: 2, // Rejected
+            resolved_at: env.ledger().timestamp(),
+        });
+
+        Ok(())
+    }
+
+    // ================================================================
+    // Contract Configuration
+    // ================================================================
+
+    pub fn update_config(
+        env: Env,
+        caller: Address,
+        high_rep_threshold: u32,
+        bonus_bps: u32,
+        min_discount_rate_bps: u32,
+        decay_rate_bps: u32,
+        decay_period_ledgers: u64,
+        dispute_timeout_ledgers: u64,
+    ) -> Result<(), ContractError> {
+        crate::config::update_config(
+            &env,
+            &caller,
+            high_rep_threshold,
+            bonus_bps,
+            min_discount_rate_bps,
+            decay_rate_bps,
+            decay_period_ledgers,
+            dispute_timeout_ledgers,
+        )
+        .map_err(|_| ContractError::Unauthorized)
+    }
+
+    pub fn get_config(env: Env) -> Result<Config, ContractError> {
+        crate::storage::get_config(&env).ok_or(ContractError::Unauthorized)
+    }
     // payer_score
     // ----------------------------------------------------------------
     /// Access: Anyone
@@ -1273,7 +1493,7 @@ impl InvoiceLiquidityContract {
     pub fn get_invoice_count(env: Env) -> u64 {
         env.storage()
             .persistent()
-            .get(&StorageKey::InvoiceCount)
+            .get(&crate::storage::DataKey::InvoiceCount)
             .unwrap_or(0)
     }
 }
@@ -1303,7 +1523,7 @@ fn validate_invoice_terms(
     let max_rate: u32 = env
         .storage()
         .instance()
-        .get(&StorageKey::MaxDiscountRate)
+        .get(&crate::storage::DataKey::MaxDiscountRate)
         .unwrap_or(5000);
     if discount_rate == 0 || discount_rate > max_rate {
         return Err(ContractError::InvalidDiscountRate);
@@ -1330,7 +1550,7 @@ fn validate_invoice_terms(
 fn is_approved_token(env: &Env, token: &Address) -> bool {
     env.storage()
         .persistent()
-        .get(&StorageKey::ApprovedToken(token.clone()))
+        .get(&crate::storage::DataKey::ApprovedToken(token.clone()))
         .unwrap_or(false)
 }
 
@@ -1338,7 +1558,7 @@ fn notify_distribution_funding(env: &Env, lp: &Address, amount_usdc_equivalent: 
     let Some(dist_contract) = env
         .storage()
         .instance()
-        .get::<_, Address>(&StorageKey::DistributionContract)
+        .get::<_, Address>(&crate::storage::DataKey::DistributionContract)
     else {
         return;
     };
@@ -1360,7 +1580,7 @@ fn notify_distribution_settlement(
     let Some(dist_contract) = env
         .storage()
         .instance()
-        .get::<_, Address>(&StorageKey::DistributionContract)
+        .get::<_, Address>(&crate::storage::DataKey::DistributionContract)
     else {
         return;
     };
@@ -1392,6 +1612,7 @@ mod tests_state_machine;
 mod tests_storage;
 #[cfg(test)]
 mod tests_invoice_paid_event;
+mod tests_dispute;
 #[cfg(test)]
 mod tests_lp_funding_details_event;
 #[cfg(test)]

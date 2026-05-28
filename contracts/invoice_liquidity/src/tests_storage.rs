@@ -1,7 +1,8 @@
 #![cfg(test)]
 
 use super::*;
-use crate::invoice::{InvoiceStatus, StorageKey};
+use crate::invoice::InvoiceStatus;
+use crate::storage::DataKey;
 use soroban_sdk::{
     testutils::{storage::Persistent, Address as _, Ledger},
     token::{Client as TokenClient, StellarAssetClient},
@@ -67,7 +68,7 @@ fn test_submit_invoice_sets_ttl() {
         &t.token.address,
     );
 
-    let key = StorageKey::Invoice(id);
+    let key = crate::storage::DataKey::Invoice(id);
     let ttl = t.env.as_contract(&t.contract.address, || {
         t.env.storage().persistent().get_ttl(&key)
     });
@@ -76,7 +77,7 @@ fn test_submit_invoice_sets_ttl() {
     assert!(ttl > 0);
 
     // Verify InvoiceCount TTL as well
-    let count_key = StorageKey::InvoiceCount;
+    let count_key = crate::storage::DataKey::InvoiceCount;
     let count_ttl = t.env.as_contract(&t.contract.address, || {
         t.env.storage().persistent().get_ttl(&count_key)
     });
@@ -98,7 +99,7 @@ fn test_fund_invoice_extends_ttl() {
         &t.token.address,
     );
 
-    let key = StorageKey::Invoice(id);
+    let key = crate::storage::DataKey::Invoice(id);
     let initial_ttl = t.env.as_contract(&t.contract.address, || {
         t.env.storage().persistent().get_ttl(&key)
     });
@@ -200,7 +201,7 @@ fn test_storage_ttl_near_boundary() {
         &t.token.address,
     );
 
-    let key = StorageKey::Invoice(id);
+    let key = crate::storage::DataKey::Invoice(id);
     let ttl = t.env.as_contract(&t.contract.address, || {
         t.env.storage().persistent().get_ttl(&key)
     });

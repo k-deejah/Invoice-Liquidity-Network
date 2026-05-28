@@ -9,7 +9,7 @@ use crate::{
 
 use soroban_sdk::{
     testutils::{Address as _, Events},
-    token::StellarAssetClient,
+    token::{Client as TokenClient, StellarAssetClient},
     Address, Env,
 };
 

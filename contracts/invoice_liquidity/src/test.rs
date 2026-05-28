@@ -67,6 +67,7 @@ fn setup() -> TestEnv {
     // ---- Set ledger timestamp to a known baseline ----
     let mut ledger_info = env.ledger().get();
     ledger_info.timestamp = 1_700_000_000;
+    ledger_info.sequence_number = 100;
     env.ledger().set(ledger_info);
 
     TestEnv {
@@ -940,7 +941,9 @@ fn test_reputation_decay_inactive_score() {
     let t = setup();
     
     // Set payer score to 80
-    t.env.as_contract(&t.contract.address, || { invoice::set_payer_score(&t.env, &t.payer, 80); });
+    t.env.as_contract(&t.contract.address, || {
+        invoice::set_payer_score(&t.env, &t.payer, 80);
+    });
     
     // Initialize decay config: 100 bps (1%) per 1000 ledgers
     let config = Config {
@@ -949,8 +952,11 @@ fn test_reputation_decay_inactive_score() {
         min_discount_rate_bps: 100,
         decay_rate_bps: 100,        // 1% per period
         decay_period_ledgers: 1000,
+        dispute_timeout_ledgers: 100,
     };
-    t.env.as_contract(&t.contract.address, || { config::set_config(&t.env, &config).unwrap(); });
+    t.env.as_contract(&t.contract.address, || {
+        crate::storage::set_config(&t.env, &config);
+    });
     
     // Advance ledger by 2100 (more than 2 periods)
     let mut ledger = t.env.ledger().get();
@@ -971,7 +977,9 @@ fn test_reputation_no_decay_when_inactive() {
     let t = setup();
     
     // Set payer score to 80
-    t.env.as_contract(&t.contract.address, || { invoice::set_payer_score(&t.env, &t.payer, 80); });
+    t.env.as_contract(&t.contract.address, || {
+        invoice::set_payer_score(&t.env, &t.payer, 80);
+    });
     
     // Initialize decay config with very high decay period (never decays)
     let config = Config {
@@ -980,8 +988,11 @@ fn test_reputation_no_decay_when_inactive() {
         min_discount_rate_bps: 100,
         decay_rate_bps: 100,
         decay_period_ledgers: 10_000_000,  // Very long period
+        dispute_timeout_ledgers: 100,
     };
-    t.env.as_contract(&t.contract.address, || { config::set_config(&t.env, &config).unwrap(); });
+    t.env.as_contract(&t.contract.address, || {
+        crate::storage::set_config(&t.env, &config);
+    });
     
     // Advance ledger by only 1000
     let mut ledger = t.env.ledger().get();
@@ -1000,7 +1011,9 @@ fn test_reputation_decay_activity_resets() {
     let t = setup();
     
     // Set initial score to 80
-    t.env.as_contract(&t.contract.address, || { invoice::set_payer_score(&t.env, &t.payer, 80); });
+    t.env.as_contract(&t.contract.address, || {
+        invoice::set_payer_score(&t.env, &t.payer, 80);
+    });
     
     let config = Config {
         high_rep_threshold: 80,
@@ -1008,16 +1021,21 @@ fn test_reputation_decay_activity_resets() {
         min_discount_rate_bps: 100,
         decay_rate_bps: 100,
         decay_period_ledgers: 1000,
+        dispute_timeout_ledgers: 100,
     };
-    t.env.as_contract(&t.contract.address, || { config::set_config(&t.env, &config).unwrap(); });
+
+    t.env.as_contract(&t.contract.address, || {
+        crate::storage::set_config(&t.env, &config);
+    });
     
     // Advance by half a decay period
     let mut ledger = t.env.ledger().get();
     ledger.sequence_number += 500;
     t.env.ledger().set(ledger);
     
-    // Activity: set score again (resets last_activity_ledger)
-    t.env.as_contract(&t.contract.address, || { invoice::set_payer_score(&t.env, &t.payer, 85); });
+    t.env.as_contract(&t.contract.address, || {
+        invoice::set_payer_score(&t.env, &t.payer, 85);
+    });
     
     // Advance by another half period (not enough from reset)
     ledger = t.env.ledger().get();
@@ -1036,7 +1054,9 @@ fn test_reputation_score_never_goes_below_zero() {
     let t = setup();
     
     // Set payer score to only 5 (low)
-    t.env.as_contract(&t.contract.address, || { invoice::set_payer_score(&t.env, &t.payer, 5); });
+    t.env.as_contract(&t.contract.address, || {
+        invoice::set_payer_score(&t.env, &t.payer, 5);
+    });
     
     let config = Config {
         high_rep_threshold: 80,
@@ -1044,8 +1064,11 @@ fn test_reputation_score_never_goes_below_zero() {
         min_discount_rate_bps: 100,
         decay_rate_bps: 5000,  // Very aggressive decay: 50% per period
         decay_period_ledgers: 100,
+        dispute_timeout_ledgers: 100,
     };
-    t.env.as_contract(&t.contract.address, || { config::set_config(&t.env, &config).unwrap(); });
+    t.env.as_contract(&t.contract.address, || {
+        crate::storage::set_config(&t.env, &config);
+    });
     
     // Advance by 10 decay periods
     let mut ledger = t.env.ledger().get();
@@ -1064,7 +1087,7 @@ fn test_reputation_score_never_exceeds_100() {
     
     // Try to set score above 100
     t.env.as_contract(&t.contract.address, || {
-        t.env.as_contract(&t.contract.address, || { invoice::set_payer_score(&t.env, &t.payer, 150); });
+        invoice::set_payer_score(&t.env, &t.payer, 150);
     });
     
     // Score should be capped at 100

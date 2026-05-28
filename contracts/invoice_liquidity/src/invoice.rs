@@ -13,6 +13,7 @@ pub enum InvoiceStatus {
     Paid,            // payer has settled in full, LP has been released
     Defaulted,       // past due_date and still unpaid
     Appealed,        // payer has contested the default ruling (issue #36)
+    Disputed,        // payer has disputed the invoice before settlement
     Expired,         // past due_date with no funding
     Cancelled,       // freelancer cancelled the invoice before funding
 }
@@ -94,6 +95,19 @@ pub struct AppealRecord {
 }
 
 // ----------------------------------------------------------------
+// Dispute record stored per invoice
+// ----------------------------------------------------------------
+
+#[contracttype]
+#[derive(Clone, Debug)]
+pub struct DisputeRecord {
+    /// SHA-256 hash of off-chain dispute evidence.
+    pub reason_hash: BytesN<32>,
+    /// Ledger timestamp when the dispute was filed.
+    pub disputed_at: u64,
+}
+
+// ----------------------------------------------------------------
 // Issue #34: Single entry in the LP priority queue
 // ----------------------------------------------------------------
 
@@ -125,6 +139,8 @@ pub enum StorageKey {
     // ── Issue #36: appeal_default ──────────────────────────────────
     Appeal(u64),               // AppealRecord keyed by invoice ID
     PreDefaultPayerScore(u64), // payer score snapshot taken BEFORE claim_default penalty
+    // Dispute
+    Dispute(u64),              // DisputeRecord keyed by invoice ID
     // ── Issue #34: LP priority queue ──────────────────────────────
     LpScore(Address),    // LP reputation score (distinct from PayerScore)
     FundQueue(u64),      // Vec<LpFundRequest> — LPs that joined the queue for an invoice
@@ -183,7 +199,7 @@ pub fn next_invoice_id(env: &Env) -> u64 {
 }
 
 // ----------------------------------------------------------------
-// Payer reputation helpers
+// Reputation Score
 // ----------------------------------------------------------------
 
 /// Get a payer's reputation score (0-100, default 50)
@@ -194,7 +210,7 @@ pub fn get_payer_score(env: &Env, payer: &Address) -> u32 {
     {
         Some(mut rep) => {
             // Apply decay if enough ledgers have passed and config exists
-            if let Ok(decay_config) = crate::config::get_config(env) {
+            if let Some(decay_config) = crate::storage::get_config(env) {
                 let current_ledger = env.ledger().sequence();
                 let ledgers_since_activity = current_ledger.saturating_sub(rep.last_activity_ledger);
                 
@@ -285,6 +301,20 @@ pub fn get_pre_default_payer_score(env: &Env, invoice_id: u64) -> Option<u32> {
     env.storage()
         .persistent()
         .get(&StorageKey::PreDefaultPayerScore(invoice_id))
+}
+
+// Dispute helpers
+
+pub fn get_dispute(env: &Env, invoice_id: u64) -> Option<DisputeRecord> {
+    env.storage()
+        .persistent()
+        .get(&StorageKey::Dispute(invoice_id))
+}
+
+pub fn save_dispute(env: &Env, invoice_id: u64, record: &DisputeRecord) {
+    env.storage()
+        .persistent()
+        .set(&StorageKey::Dispute(invoice_id), record);
 }
 
 // ----------------------------------------------------------------
