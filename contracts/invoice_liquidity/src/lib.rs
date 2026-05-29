@@ -399,7 +399,7 @@ impl InvoiceLiquidityContract {
             payer,
             token,
             amount,
-            due_date,
+            due_date: due_date.try_into().unwrap(),
             discount_rate,
             status: InvoiceStatus::Pending,
             funder: None,
@@ -422,7 +422,7 @@ impl InvoiceLiquidityContract {
             payer: invoice.payer.clone(),
             token: invoice.token.clone(),
             amount: invoice.amount,
-            due_date: invoice.due_date,
+            due_date: u64::from(invoice.due_date),
             discount_rate: invoice.discount_rate,
             status: invoice.status.clone(),
             timestamp: env.ledger().timestamp(),
@@ -454,7 +454,8 @@ impl InvoiceLiquidityContract {
         let mut invoice = load_invoice(&env, invoice_id);
         require_submitter_by_id(&env, &freelancer, invoice_id)?;
 
-        if invoice.status == InvoiceStatus::Pending && env.ledger().timestamp() >= invoice.due_date
+        if invoice.status == InvoiceStatus::Pending
+            && env.ledger().timestamp() >= u64::from(invoice.due_date)
         {
             invoice.status = InvoiceStatus::Expired;
             save_invoice(&env, &invoice);
@@ -477,7 +478,7 @@ impl InvoiceLiquidityContract {
         validate_invoice_terms(&env, amount, due_date, discount_rate)?;
 
         invoice.amount = amount;
-        invoice.due_date = due_date;
+        invoice.due_date = due_date.try_into().unwrap();
         invoice.discount_rate = discount_rate;
 
         save_invoice(&env, &invoice);
@@ -488,7 +489,7 @@ impl InvoiceLiquidityContract {
             payer: invoice.payer.clone(),
             token: invoice.token.clone(),
             amount: invoice.amount,
-            due_date: invoice.due_date,
+            due_date: u64::from(invoice.due_date),
             discount_rate: invoice.discount_rate,
             status: invoice.status.clone(),
         });
@@ -537,7 +538,7 @@ impl InvoiceLiquidityContract {
                 payer: params.payer,
                 token: params.token,
                 amount: params.amount,
-                due_date: params.due_date,
+due_date: params.due_date.try_into().unwrap(),
                 discount_rate: params.discount_rate,
                 status: InvoiceStatus::Pending,
                 funder: None,
@@ -560,7 +561,7 @@ impl InvoiceLiquidityContract {
                 payer: invoice.payer.clone(),
                 token: invoice.token.clone(),
                 amount: invoice.amount,
-                due_date: invoice.due_date,
+                due_date: u64::from(invoice.due_date),
                 discount_rate: invoice.discount_rate,
                 status: invoice.status.clone(),
                 timestamp: env.ledger().timestamp(),
@@ -710,7 +711,8 @@ impl InvoiceLiquidityContract {
 
         let mut invoice = load_invoice(&env, invoice_id);
 
-        if invoice.status == InvoiceStatus::Pending && env.ledger().timestamp() >= invoice.due_date
+        if invoice.status == InvoiceStatus::Pending
+            && env.ledger().timestamp() >= u64::from(invoice.due_date)
         {
             invoice.status = InvoiceStatus::Expired;
             save_invoice(&env, &invoice);
@@ -782,7 +784,7 @@ impl InvoiceLiquidityContract {
             token.transfer(&contract_address, &invoice.freelancer, &freelancer_payout);
 
             invoice.status = InvoiceStatus::Funded;
-            invoice.funded_at = Some(env.ledger().timestamp());
+            invoice.funded_at = Some(env.ledger().timestamp().try_into().unwrap());
             invoice.funder = Some(funder.clone());
 
             // Boost LP score on successful funding
@@ -838,8 +840,8 @@ impl InvoiceLiquidityContract {
 
         let now = env.ledger().timestamp();
 
-        let seconds_to_due = if invoice.due_date > now {
-            invoice.due_date - now
+        let seconds_to_due = if u64::from(invoice.due_date) > now {
+            u64::from(invoice.due_date) - now
         } else {
             0
         };
@@ -857,9 +859,9 @@ impl InvoiceLiquidityContract {
             fund_amount,
             amount_funded: invoice.amount_funded,
             invoice_amount: invoice.amount,
-            due_date: invoice.due_date,
+            due_date: u64::from(invoice.due_date),
             discount_rate: invoice.discount_rate,
-            funded_at: invoice.funded_at,
+            funded_at: invoice.funded_at.map(|ts| ts.into()),
             status: invoice.status.clone(),
 
             // NEW
@@ -990,7 +992,7 @@ impl InvoiceLiquidityContract {
 
         let mut invoice = load_invoice(&env, invoice_id);
 
-        if env.ledger().timestamp() < invoice.due_date {
+        if env.ledger().timestamp() < u64::from(invoice.due_date) {
             return Err(ContractError::NotYetDefaulted);
         }
 
@@ -1137,7 +1139,7 @@ impl InvoiceLiquidityContract {
         // Increment total paid counter
         increment_total_paid(&env);
 
-        let paid_on_time = env.ledger().timestamp() <= invoice.due_date;
+        let paid_on_time = env.ledger().timestamp() <= u64::from(invoice.due_date);
         notify_distribution_settlement(&env, &invoice.freelancer, &invoice.payer, paid_on_time);
 
         // --- Update payer reputation ---
@@ -1230,7 +1232,7 @@ impl InvoiceLiquidityContract {
         }
 
         let now = env.ledger().timestamp();
-        if now < invoice.due_date {
+        if now < u64::from(invoice.due_date) {
             return Err(ContractError::NotYetDefaulted);
         }
 
@@ -1285,7 +1287,7 @@ impl InvoiceLiquidityContract {
             payer: invoice.payer.clone(),
             token: invoice.token.clone(),
             amount: invoice.amount,
-            due_date: invoice.due_date,
+            due_date: u64::from(invoice.due_date),
             defaulted_at: now,
             discount_amount: total_refunded,
             status: invoice.status.clone(),
@@ -1340,7 +1342,7 @@ impl InvoiceLiquidityContract {
 
         // Appeal must be filed within the appeal window after default.
         // A default can only occur after due_date, so we measure from due_date.
-        if now > invoice.due_date + APPEAL_WINDOW_SECONDS {
+        if now > u64::from(invoice.due_date) + APPEAL_WINDOW_SECONDS {
             return Err(ContractError::AppealWindowClosed);
         }
 
@@ -1750,6 +1752,11 @@ fn validate_invoice_terms(
         return Err(ContractError::InvalidDiscountRate);
     }
 
+    // The on-chain storage representation now uses u32 timestamps.
+    if due_date > u64::from(u32::MAX) {
+        return Err(ContractError::InvalidDueDate);
+    }
+
     let now = env.ledger().timestamp();
 
     // Validate due date is in the future
@@ -1840,3 +1847,4 @@ mod tests_protocol_fee;
 mod tests_security;
 mod tests_state_machine;
 mod tests_storage;
+mod tests_storage_extra;

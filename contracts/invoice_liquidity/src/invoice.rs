@@ -30,11 +30,11 @@ pub struct Invoice {
     pub payer: Address,      // the client who owes the money
     pub token: Address,      // token used for this invoice lifecycle
     pub amount: i128,        // full invoice value in stroops (1 USDC = 10_000_000)
-    pub due_date: u64,       // Unix timestamp — when the payer must settle by
+    pub due_date: u32,       // Unix timestamp — when the payer must settle by
     pub discount_rate: u32,  // basis points, e.g. 300 = 3.00%
     pub status: InvoiceStatus,
     pub funder: Option<Address>, // set when an LP funds the invoice (legacy for full funding)
-    pub funded_at: Option<u64>,  // ledger timestamp when funding occurred
+    pub funded_at: Option<u32>,  // ledger timestamp when funding occurred
     pub amount_funded: i128,     // cumulative amount funded so far
     pub submitter_reputation_at_submission: u32, // snapshot of freelancer's reputation at submission time
 }
@@ -87,7 +87,7 @@ pub struct AppealRecord {
     /// SHA-256 hash of off-chain evidence submitted by the payer.
     pub evidence_hash: BytesN<32>,
     /// Ledger timestamp when the appeal was filed.
-    pub appealed_at: u64,
+    pub appealed_at: u32,
     /// Payer reputation score just before the default was applied,
     /// used to restore the score if the appeal is upheld.
     pub pre_default_score: u32,
@@ -102,8 +102,8 @@ pub struct AppealRecord {
 pub struct DisputeRecord {
     /// SHA-256 hash of off-chain dispute evidence.
     pub reason_hash: BytesN<32>,
-    /// Ledger timestamp when the dispute was filed.
-    pub disputed_at: u64,
+    /// Ledger sequence when the dispute was filed.
+    pub disputed_at: u32,
 }
 
 // ----------------------------------------------------------------
