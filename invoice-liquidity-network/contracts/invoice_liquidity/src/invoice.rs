@@ -73,6 +73,7 @@ pub enum StorageKey {
     FeeRate,
     MaxDiscountRate,
     DistributionContract,
+    ReentrancyLock,
 }
 
 // ----------------------------------------------------------------

@@ -491,6 +491,25 @@ fn test_transfer_funded_invoice_fails() {
     assert_eq!(result, Err(Ok(ContractError::AlreadyFunded)));
 }
 
+#[test]
+fn test_fund_invoice_reentrancy_guard_rejects_locked_call() {
+    let t = setup();
+    let id = submit_standard_invoice(&t);
+
+    t.env.as_contract(&t.contract.address, || {
+        t.env
+            .storage()
+            .instance()
+            .set(&StorageKey::ReentrancyLock, &true);
+    });
+
+    let result = t
+        .contract
+        .try_fund_invoice(&t.funder, &id, &INVOICE_AMOUNT);
+
+    assert_eq!(result, Err(Ok(ContractError::Reentrancy)));
+}
+
 // ----------------------------------------------------------------
 // fund_invoice — happy path
 // ----------------------------------------------------------------
@@ -700,6 +719,25 @@ fn test_mark_paid_nonexistent_invoice_fails() {
 
     let result = t.contract.try_mark_paid(&999);
     assert_eq!(result, Err(Ok(ContractError::InvoiceNotFound)));
+}
+
+#[test]
+fn test_mark_paid_reentrancy_guard_rejects_locked_call() {
+    let t = setup();
+    let id = submit_standard_invoice(&t);
+
+    t.contract.fund_invoice(&t.funder, &id, &INVOICE_AMOUNT);
+
+    t.env.as_contract(&t.contract.address, || {
+        t.env
+            .storage()
+            .instance()
+            .set(&StorageKey::ReentrancyLock, &true);
+    });
+
+    let result = t.contract.try_mark_paid(&id);
+
+    assert_eq!(result, Err(Ok(ContractError::Reentrancy)));
 }
 
 #[test]

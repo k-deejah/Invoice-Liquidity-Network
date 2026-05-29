@@ -17,4 +17,5 @@ pub enum ContractError {
     OverfundingRejected = 12,
     InvoiceExpired = 13,
     BatchTooLarge = 14,
+    Reentrancy = 15,
 }
