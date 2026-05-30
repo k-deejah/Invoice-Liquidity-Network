@@ -742,6 +742,8 @@ impl InvoiceLiquidityContract {
         invoice_id: u64,
         fund_amount: i128,
     ) -> Result<(), ContractError> {
+        let _guard = ReentrancyGuard::enter(&env)?;
+
         if is_paused(&env) {
             return Err(ContractError::ContractPaused);
         }
@@ -1053,6 +1055,8 @@ impl InvoiceLiquidityContract {
     // ------------------------------------------------------------
     /// Access: Payer only
     pub fn mark_paid(env: Env, invoice_id: u64, amount: i128) -> Result<(), ContractError> {
+        let _guard = ReentrancyGuard::enter(&env)?;
+
         if is_paused(&env) {
             return Err(ContractError::ContractPaused);
         }
@@ -1761,6 +1765,39 @@ impl InvoiceLiquidityContract {
 
 fn token_client<'a>(env: &'a Env, token: &Address) -> TokenClient<'a> {
     TokenClient::new(env, token)
+}
+
+struct ReentrancyGuard<'a> {
+    env: &'a Env,
+}
+
+impl<'a> ReentrancyGuard<'a> {
+    fn enter(env: &'a Env) -> Result<Self, ContractError> {
+        let locked: bool = env
+            .storage()
+            .instance()
+            .get(&crate::storage::DataKey::ReentrancyLock)
+            .unwrap_or(false);
+
+        if locked {
+            return Err(ContractError::Reentrancy);
+        }
+
+        env.storage()
+            .instance()
+            .set(&crate::storage::DataKey::ReentrancyLock, &true);
+
+        Ok(Self { env })
+    }
+}
+
+impl Drop for ReentrancyGuard<'_> {
+    fn drop(&mut self) {
+        self.env
+            .storage()
+            .instance()
+            .set(&crate::storage::DataKey::ReentrancyLock, &false);
+    }
 }
 
 fn discount_rate_as_i128(rate: u32) -> i128 {

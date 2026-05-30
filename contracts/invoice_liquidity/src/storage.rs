@@ -13,6 +13,7 @@ pub enum DataKey {
     MaxDiscountRate,
     DistributionContract,
     Paused,
+    ReentrancyLock,
     /// Minimum payer reputation required to fund an invoice (Issue #28). Default 0.
     MinPayerReputation,
 
