@@ -11,6 +11,7 @@ use access::*;
 mod tests_lp_pagination;
 mod tests_new_features;
 mod tests_pagination;
+mod tests_reentrancy;
 mod tests_regression;
 mod tests_xlm_support;
 #[cfg(test)]
